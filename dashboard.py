@@ -183,4 +183,4 @@ else:
         retention_matrix = calculate_retention(df_confirmadas)
         
         if retention_matrix.shape[1] < 2:
-            st.info("💡 Se necesita un rango de fechas de varios meses para calcular y visualizar la tasa de retención de cl)
+            st.info("💡 Se necesita un rango de fechas de varios meses para calcular y visualizar la tasa de retención de cl")
