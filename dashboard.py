@@ -1,5 +1,4 @@
 # dashboard.py
-# dashboard.py
 
 import streamlit as st
 import pandas as pd
@@ -46,7 +45,9 @@ except FileNotFoundError:
     st.stop()
 
 # --- TÍTULO Y DESCRIPCIÓN ---
-st.title("🚀 Dashboard de Business Intelligence para SaaS de Restaurantes")
+st.title("📊 Revenue Analytics & Customer Intelligence Hub")
+st.markdown("### *Advanced Business Intelligence Dashboard for Restaurant SaaS Platform*")
+st.markdown("---")
 
 # --- BARRA LATERAL CON FILTROS ---
 st.sidebar.header("Filtros Interactivos")
@@ -67,7 +68,7 @@ st.sidebar.metric(label="Total Reservas (Bruto)", value=f"{len(df_filtered)}")
 if df_filtered.empty:
     st.warning("No hay datos disponibles para los filtros seleccionados.")
 else:
-    st.header("KPIs Clave de la Selección")
+    st.header("🎯 Executive KPIs & Performance Metrics")
     total_reservations_bruto = len(df_filtered)
     df_confirmadas = df_filtered[df_filtered['status'] == 'Confirmada']
     
@@ -87,9 +88,8 @@ else:
     st.markdown("---")
 
     # --- SECCIÓN 1: TABLA DE RENDIMIENTO POR RESTAURANTE ---
-    st.header("Análisis de Rendimiento por Restaurante")
+    st.header("🏪 Restaurant Performance Intelligence")
     
-    # <<< MEJORA DE ROBUSTEZ 1: Comprueba si hay datos confirmados antes de continuar >>>
     if df_confirmadas.empty:
         st.info("No hay reservas 'Confirmadas' en la selección actual para mostrar el análisis detallado.")
     else:
@@ -109,7 +109,7 @@ else:
 
         st.markdown("---")
 
-        st.header("Análisis de Tendencias y Canales")
+        st.header("📈 Revenue Trends & Channel Analytics")
         col1, col2 = st.columns(2)
         with col1:
             st.subheader("Ingresos Semanales por Restaurante")
@@ -120,29 +120,67 @@ else:
             st.subheader("Distribución de Reservas por Canal")
             fig_channel = px.pie(df_confirmadas, names='channel_name', hole=0.4)
             st.plotly_chart(fig_channel, use_container_width=True)
+
+        # --- NUEVA SECCIÓN: BOXPLOT DE GASTO ---
+        st.markdown("---")
+        st.header("💎 Revenue Distribution & High-Value Customer Analysis")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("Revenue Distribution Analysis")
+            fig_boxplot = px.box(
+                df_confirmadas, 
+                y='total_spent',
+                title='Customer Spending Pattern Analysis',
+                labels={'total_spent': 'Revenue per Booking (€)'}
+            )
+            fig_boxplot.update_layout(showlegend=False)
+            st.plotly_chart(fig_boxplot, use_container_width=True)
+            
+            # Estadísticas descriptivas
+            stats = df_confirmadas['total_spent'].describe()
+            st.subheader("🎯 Revenue Insights")
+            col_stats1, col_stats2 = st.columns(2)
+            with col_stats1:
+                st.metric("Median Revenue", f"€ {stats['50%']:.2f}")
+                st.metric("25th Percentile", f"€ {stats['25%']:.2f}")
+            with col_stats2:
+                st.metric("75th Percentile", f"€ {stats['75%']:.2f}")
+                st.metric("Peak Revenue", f"€ {stats['max']:.2f}")
+        
+        with col2:
+            st.subheader("Restaurant Revenue Benchmarking")
+            fig_boxplot_restaurant = px.box(
+                df_confirmadas, 
+                x='restaurant_id',
+                y='total_spent',
+                title='Revenue Performance by Location',
+                labels={'total_spent': 'Revenue (€)', 'restaurant_id': 'Restaurant ID'}
+            )
+            st.plotly_chart(fig_boxplot_restaurant, use_container_width=True)
+            
+            # Top outliers (valores atípicos)
+            q3 = df_confirmadas['total_spent'].quantile(0.75)
+            iqr = q3 - df_confirmadas['total_spent'].quantile(0.25)
+            upper_bound = q3 + 1.5 * iqr
+            outliers = df_confirmadas[df_confirmadas['total_spent'] > upper_bound]
+            
+            if not outliers.empty:
+                st.subheader("🌟 Premium Customer Bookings")
+                st.write(f"High-value bookings > €{upper_bound:.2f}")
+                st.dataframe(
+                    outliers[['restaurant_id', 'total_spent', 'channel_name']].sort_values('total_spent', ascending=False).head(),
+                    use_container_width=True
+                )
+            else:
+                st.info("No premium bookings detected in current selection")
             
         st.markdown("---")
 
         # --- SECCIÓN 3: ANÁLISIS DE CHURN Y RETENCIÓN ---
-        st.header("Análisis de Retención de Clientes (Churn)")
+        st.header("🔄 Customer Retention Intelligence & Churn Analysis")
         retention_matrix = calculate_retention(df_confirmadas)
         
-        # <<< MEJORA DE ROBUSTEZ 2: Comprueba si el gráfico de retención es útil >>>
         if retention_matrix.shape[1] < 2:
-            st.info("💡 Se necesita un rango de fechas de varios meses para calcular y visualizar la tasa de retención de clientes a lo largo del tiempo.")
-        else:
-            fig_retention = go.Figure(data=go.Heatmap(
-                z=retention_matrix.values,
-                x=[f"Mes {i}" for i in retention_matrix.columns],
-                y=[str(period) for period in retention_matrix.index],
-                hoverongaps=False, colorscale='Blues',
-                text=[[f"{val:.1f}%" if not pd.isna(val) else "" for val in row] for row in retention_matrix.values],
-                texttemplate="%{text}"
-            ))
-            fig_retention.update_layout(title_text='Tasa de Retención Mensual (Inverso del Churn)', xaxis_title_text='Meses desde la Primera Reserva', yaxis_title_text='Mes de la Primera Reserva',
-                coloraxis_colorbar=dict(title='% Retención'))
-            st.plotly_chart(fig_retention, use_container_width=True)
-        
-        st.info("""
-        **¿Cómo leer este gráfico?** `Churn = 100% - Retención`. Un porcentaje bajo (azul claro) significa un **Churn alto**.
-        """)
+            st.info("💡 Se necesita un rango de fechas de varios meses para calcular y visualizar la tasa de retención de cl
