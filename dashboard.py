@@ -41,7 +41,7 @@ file_name = "Synthetic reserves dataset.csv"
 try:
     df_base = load_and_process_data(file_name)
 except FileNotFoundError:
-    st.error(f"Error: El archivo '{file_name}' no se encontró...")
+    st.error(f"Error: El archivo '{file_name}' no se encontró. Asegúrate de que está en la misma carpeta que dashboard.py.")
     st.stop()
 
 # --- TÍTULO Y DESCRIPCIÓN ---
@@ -66,21 +66,16 @@ st.sidebar.metric(label="Total Reservas (Bruto)", value=f"{len(df_filtered)}")
 if df_filtered.empty:
     st.warning("No hay datos disponibles para los filtros seleccionados.")
 else:
-    # --- KPIs AVANZADOS ---
     st.header("KPIs Clave de la Selección")
-    
     total_reservations_bruto = len(df_filtered)
     df_confirmadas = df_filtered[df_filtered['status'] == 'Confirmada']
     
-    # Cálculos para los KPIs
     total_revenue = df_confirmadas['total_spent'].sum()
     avg_ticket = df_confirmadas['total_spent'].mean() if not df_confirmadas.empty else 0
-    # <<< MEJORA KPI >>>
     confirmation_rate = len(df_confirmadas) / total_reservations_bruto * 100 if total_reservations_bruto > 0 else 0
     cancellation_rate = (df_filtered['status'] == 'Cancelada').sum() / total_reservations_bruto * 100
     no_show_rate = (df_filtered['status'] == 'No Show').sum() / total_reservations_bruto * 100
 
-    # Mostramos los KPIs
     kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
     kpi1.metric("Ingresos Totales", f"€ {total_revenue:,.2f}")
     kpi2.metric("Ticket Promedio", f"€ {avg_ticket:,.2f}")
@@ -92,9 +87,10 @@ else:
 
     # --- SECCIÓN 1: TABLA DE RENDIMIENTO POR RESTAURANTE ---
     st.header("Análisis de Rendimiento por Restaurante")
-
+    
+    # <<< MEJORA DE ROBUSTEZ 1: Comprueba si hay datos confirmados antes de continuar >>>
     if df_confirmadas.empty:
-        st.info("No hay reservas confirmadas en la selección para mostrar el rendimiento por restaurante.")
+        st.info("No hay reservas 'Confirmadas' en la selección actual para mostrar el análisis detallado.")
     else:
         restaurant_revenue = df_confirmadas.groupby('restaurant_id').agg(Ingresos_Totales=('total_spent', 'sum'), Ticket_Promedio=('total_spent', 'mean'))
         status_counts = df_filtered.groupby('restaurant_id')['status'].value_counts().unstack(fill_value=0)
@@ -104,55 +100,48 @@ else:
         restaurant_summary['Tasa_NoShow_%'] = (restaurant_summary['No Show'] / restaurant_summary['Total_Reservas'] * 100).round(1)
 
         display_cols = ['Ingresos_Totales', 'Ticket_Promedio', 'Confirmada', 'Tasa_Cancelacion_%', 'Tasa_NoShow_%']
-        st.dataframe(
-            restaurant_summary[display_cols].sort_values('Ingresos_Totales', ascending=False),
-            column_config={
-                "Ingresos_Totales": st.column_config.NumberColumn(format="€ %.2f"), "Ticket_Promedio": st.column_config.NumberColumn(format="€ %.2f"),
+        st.dataframe(restaurant_summary[display_cols].sort_values('Ingresos_Totales', ascending=False),
+            column_config={ "Ingresos_Totales": st.column_config.NumberColumn(format="€ %.2f"), "Ticket_Promedio": st.column_config.NumberColumn(format="€ %.2f"),
                 "Tasa_Cancelacion_%": st.column_config.ProgressColumn(format="%.1f%%", min_value=0, max_value=100),
                 "Tasa_NoShow_%": st.column_config.ProgressColumn(format="%.1f%%", min_value=0, max_value=100),
-            }, use_container_width=True
-        )
+            }, use_container_width=True)
 
-    st.markdown("---")
+        st.markdown("---")
 
-    # --- SECCIÓN 2: EVOLUCIÓN TEMPORAL Y CANALES ---
-    st.header("Análisis de Tendencias y Canales")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("Ingresos Semanales por Restaurante")
-        weekly_revenue = df_confirmadas.groupby(['restaurant_id', pd.Grouper(key='date', freq='W-Mon')])['total_spent'].sum().reset_index()
-        fig_weekly = px.line(weekly_revenue, x='date', y='total_spent', color='restaurant_id', markers=True, labels={'date': 'Semana', 'total_spent': 'Ingresos (€)'})
-        st.plotly_chart(fig_weekly, use_container_width=True)
-    with col2:
-        st.subheader("Distribución de Reservas por Canal")
-        fig_channel = px.pie(df_confirmadas, names='channel_name', hole=0.4)
-        st.plotly_chart(fig_channel, use_container_width=True)
+        st.header("Análisis de Tendencias y Canales")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.subheader("Ingresos Semanales por Restaurante")
+            weekly_revenue = df_confirmadas.groupby(['restaurant_id', pd.Grouper(key='date', freq='W-Mon')])['total_spent'].sum().reset_index()
+            fig_weekly = px.line(weekly_revenue, x='date', y='total_spent', color='restaurant_id', markers=True, labels={'date': 'Semana', 'total_spent': 'Ingresos (€)'})
+            st.plotly_chart(fig_weekly, use_container_width=True)
+        with col2:
+            st.subheader("Distribución de Reservas por Canal")
+            fig_channel = px.pie(df_confirmadas, names='channel_name', hole=0.4)
+            st.plotly_chart(fig_channel, use_container_width=True)
+            
+        st.markdown("---")
+
+        # --- SECCIÓN 3: ANÁLISIS DE CHURN Y RETENCIÓN ---
+        st.header("Análisis de Retención de Clientes (Churn)")
+        retention_matrix = calculate_retention(df_confirmadas)
         
-    st.markdown("---")
-
-    # --- SECCIÓN 3: ANÁLISIS DE CHURN Y RETENCIÓN ---
-    st.header("Análisis de Retención de Clientes (Churn)")
-    retention_matrix = calculate_retention(df_confirmadas)
-    
-    # <<< CORRECCIÓN GRÁFICO DE RETENCIÓN >>>
-    fig_retention = go.Figure(data=go.Heatmap(
-        z=retention_matrix.values,
-        x=[f"Mes {i}" for i in retention_matrix.columns],
-        y=[str(i).split('-')[0] + '-' + str(i).split('-')[1] for i in retention_matrix.index],
-        hoverongaps=False, colorscale='Blues',
-        text=[[f"{val:.1f}%" if not pd.isna(val) else "" for val in row] for row in retention_matrix.values],
-        texttemplate="%{text}"
-    ))
-    fig_retention.update_layout(
-        title_text='Tasa de Retención Mensual (Inverso del Churn)',
-        xaxis_title_text='Meses desde la Primera Reserva',
-        yaxis_title_text='Mes de la Primera Reserva',
-        coloraxis_colorbar=dict(title='% Retención') # Forma correcta de poner el título
-    )
-    st.plotly_chart(fig_retention, use_container_width=True)
-    
-    st.info("""
-    **¿Cómo leer este gráfico para entender el Churn (abandono)?**
-    - `Churn = 100% - Retención`. Un color **azul claro** o un porcentaje bajo significa un **Churn alto**.
-    - Un color **azul oscuro** o un porcentaje alto significa un **Churn bajo** (los clientes siguen volviendo).
-    """)
+        # <<< MEJORA DE ROBUSTEZ 2: Comprueba si el gráfico de retención es útil >>>
+        if retention_matrix.shape[1] < 2:
+            st.info("💡 Se necesita un rango de fechas de varios meses para calcular y visualizar la tasa de retención de clientes a lo largo del tiempo.")
+        else:
+            fig_retention = go.Figure(data=go.Heatmap(
+                z=retention_matrix.values,
+                x=[f"Mes {i}" for i in retention_matrix.columns],
+                y=[str(period) for period in retention_matrix.index],
+                hoverongaps=False, colorscale='Blues',
+                text=[[f"{val:.1f}%" if not pd.isna(val) else "" for val in row] for row in retention_matrix.values],
+                texttemplate="%{text}"
+            ))
+            fig_retention.update_layout(title_text='Tasa de Retención Mensual (Inverso del Churn)', xaxis_title_text='Meses desde la Primera Reserva', yaxis_title_text='Mes de la Primera Reserva',
+                coloraxis_colorbar=dict(title='% Retención'))
+            st.plotly_chart(fig_retention, use_container_width=True)
+        
+        st.info("""
+        **¿Cómo leer este gráfico?** `Churn = 100% - Retención`. Un porcentaje bajo (azul claro) significa un **Churn alto**.
+        """)
